@@ -1,0 +1,288 @@
+---
+title: "Shopping Behavior and Product Rating Analysis"
+author: "Martin Okwumuo"
+date: "2026-01-10"
+output: html_document
+---
+
+
+#Introduction
+
+This analysis explores customer behavior and product performance using a retail dataset.  The dataset was gotten from Kaggle at "https://www.kaggle.com/datasets/nalisha/shopping-behaviour-and-product-ranking-dateset". The goal is to draw insight from the dataset on which age bracket makes the most purchases, the season with the highest sales volume, the location with highest sales volume and general customer behavioral pattern to help improve sales and customer rating.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data Preprocessing
+
+## Loading the Required Libraries
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(ggplot2)
+library(dplyr)
+```
+
+
+## Downloading the data
+
+```{r download-data}
+# Dataset identifier
+dataset <- "nalisha/shopping-behaviour-and-product-ranking-dateset"
+
+# Create data directory if it doesn't exist
+if (!dir.exists("../data")) {
+  dir.create("../data")
+}
+
+# Download only if file does not already exist
+if (!file.exists("../data/shopping_behavior_updated.csv")) {
+  system(
+    paste(
+      "kaggle datasets download",
+      dataset,
+      "-p ../data --unzip"
+    )
+  )
+}
+```
+```{r}
+list.files("../data")
+```
+
+## 3. Load and Inspect the Data
+
+### Load dataset
+
+```{r load-data}
+customer_data <- read_csv("../data/shopping_behavior_updated (1).csv")
+head(customer_data)
+```
+
+## Clean column names
+
+```{r}
+data <- clean_names(customer_data)
+```
+
+## Preview data
+
+```{r}
+head(data)
+```
+
+```{r}
+glimpse(data)
+```
+
+# Structure and summary
+```{r}
+str(data)
+```
+
+```{r}
+summary(data)
+```
+
+
+# Data Preparation
+
+## Checking for missing data
+
+```{r}
+sum(is.na(data))
+```
+
+## Checking for duplicate data
+
+```{r}
+sum(duplicated(data))
+```
+
+## Create Age Brackets
+
+```{r}
+data <- data %>%
+mutate(age_group = case_when(
+age < 18 ~ "Under 18",
+age >= 18 & age <= 25 ~ "18–25",
+age >= 26 & age <= 35 ~ "26–35",
+age >= 36 & age <= 45 ~ "36–45",
+age >= 46 & age <= 60 ~ "46–60",
+TRUE ~ "60+"
+))
+```
+
+
+## Age Bracket with the Most Purchases
+
+```{r}
+age_sales <- data %>%
+group_by(age_group) %>%
+summarise(
+total_purchases = n(),
+total_sales = sum(purchase_amount_usd, na.rm = TRUE)
+) %>%
+arrange(desc(total_purchases))
+age_sales
+```
+
+
+# Visualization
+
+```{r}
+age_sales %>%
+ggplot(aes(x = reorder(age_group, -total_purchases), y = total_purchases)) +
+geom_col(fill = "steelblue") +
+labs(title = "Purchases by Age Group",
+x = "Age Group",
+y = "Number of Purchases")
+```
+
+
+## Season with the Highest Sales Volume
+
+```{r}
+season_sales <- data %>%
+group_by(season) %>%
+summarise(
+total_purchases = n(),
+total_sales = sum(purchase_amount_usd, na.rm = TRUE)
+) %>%
+arrange(desc(total_sales))
+
+season_sales
+```
+```{r}
+season_sales %>%
+ggplot(aes(x = reorder(season, -total_sales), y = total_sales)) +
+geom_col(fill = "darkgreen") +
+labs(title = "Total Sales by Season",
+x = "Season",
+y = "Total Sales (USD)")
+```
+
+
+## Location with the Highest Sales Volume
+
+```{r}
+location_sales <- data %>%
+group_by(location) %>%
+summarise(
+total_purchases = n(),
+total_sales = sum(purchase_amount_usd, na.rm = TRUE)
+) %>%
+arrange(desc(total_sales))
+location_sales
+```
+
+```{r}
+location_sales %>%
+top_n(10, total_sales) %>%
+ggplot(aes(x = reorder(location, total_sales), y = total_sales)) +
+geom_col(fill = "purple") +
+coord_flip() +
+labs(title = "Top 10 Locations by Sales",
+x = "Location",
+y = "Total Sales (USD)")
+```
+
+
+## Top items purchased in a particular season
+
+```{r}
+top_category_per_season <- data %>%
+  group_by(season, item_purchased) %>%
+  summarise(
+    total_sales = sum(purchase_amount_usd, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(season) %>%
+  slice_max(total_sales, n = 1)
+top_category_per_season
+```
+
+
+```{r}
+top_category_per_season %>%
+  ggplot(aes(x = item_purchased, y = total_sales, fill = season)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Clothing Categories by Season",
+    x = "Clothing purchased",
+    y = "Number of Purchases"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+## Customer Behavior Analysis
+
+### Subscription vs Non‑Subscription Behavior
+
+```{r}
+subscription_analysis <- data %>%
+group_by(subscription_status) %>%
+summarise(
+avg_purchase_amount = mean(purchase_amount_usd, na.rm = TRUE),
+avg_previous_purchases = mean(previous_purchases, na.rm = TRUE),
+avg_rating = mean(review_rating, na.rm = TRUE)
+)
+subscription_analysis
+```
+
+
+### Effect of Discounts on Purchases
+
+```{r}
+discount_analysis <- data %>%
+group_by(discount_applied) %>%
+summarise(
+avg_purchase_amount = mean(purchase_amount_usd, na.rm = TRUE),
+total_purchases = n()
+)
+discount_analysis
+```
+
+
+### Purchase Frequency and Ratings
+
+```{r}
+frequency_rating <- data %>%
+group_by(frequency_of_purchases) %>%
+summarise(
+avg_rating = mean(review_rating, na.rm = TRUE),
+avg_spend = mean(purchase_amount_usd, na.rm = TRUE)
+)
+frequency_rating
+```
+
+
+# Conclusion and Recommendation
+
+## Recommendations to Improve Sales and Customer Ratings
+
+### Sales Improvement
+
+- People within the age bracket of 46-60 years has shown to be the most active customer segment. A Focus marketing on this top‑spending age group with loyalty and promotions is key to improving sales.
+- Some clothing sell higher during certain seasons. Falls generally has the highest sales record with Hats selling more followed by sweater in spring. Increasing inventory and promotions during high‑performing seasons will impact sales greatly.
+- Locations with the highest sales volumes are strong markets that may need targeted marketing campaign. Under-performing regions may need localized promotions or better logistics.
+- Subscribed customers often show higher loyalty, more repeat purchases, and better ratings. Encouraging subscriptions with exclusive benefits will surely impact sales and rating.
+- Discounts can increase purchase frequency but may reduce average order, balance is key. Using personalized discounts based on purchase history or quantity order will yield better result.
+
+### Customer Experience & Ratings
+
+The following measures will have positive impact on customer rating
+
+- Improved product quality and sizing consistency.
+- Faster delivery and more flexible  and seamless payment methods.
+- Rewarding loyal customers with points or cash back.
+- Responding actively to customer reviews and feedback.
+
+## Conclusion
+
+Understanding customer demographics, seasonal trends, and behavioral patterns provides actionable insights to boost sales and enhance customer satisfaction. Data‑driven decisions will lead to sustainable growth and stronger customer relationships.
